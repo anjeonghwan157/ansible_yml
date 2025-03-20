@@ -1,0 +1,92 @@
+#[우분투에 DHCP 서버 설치]
+
+ansible Playbook 예시: install_dhcp_server.yml
+---
+- name: Install and configure DHCP server on Ubuntu
+  hosts: all
+  become: yes  # 관리자 권한으로 실행
+  tasks:
+    # 1. apt 패키지 목록 갱신
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600  # 1시간 동안 유효한 캐시
+
+    # 2. ISC DHCP 서버 설치
+    - name: Install ISC DHCP server
+      apt:
+        name: isc-dhcp-server
+        state: present
+
+    # 3. /etc/dhcp/dhcpd.conf 파일 설정
+    - name: Configure DHCP server settings
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          # Sample DHCP Configuration
+
+          # 기본 설정
+          authoritative;
+
+          # 서브넷 정의
+          subnet 192.168.1.0 netmask 255.255.255.0 {
+              range 192.168.1.100 192.168.1.200;
+              option domain-name-servers 8.8.8.8, 8.8.4.4;
+              option routers 192.168.1.1;
+              option broadcast-address 192.168.1.255;
+              default-lease-time 600;
+              max-lease-time 7200;
+          }
+
+    # 4. DHCP 서버 인터페이스 설정
+    - name: Set DHCP server to use the correct interface
+      lineinfile:
+        path: /etc/default/isc-dhcp-server
+        regexp: '^INTERFACESv4'
+        line: 'INTERFACESv4="eth0"'
+
+    # 5. DHCP 서버 서비스 시작
+    - name: Ensure DHCP server is running
+      service:
+        name: isc-dhcp-server
+        state: started
+        enabled: yes  # 부팅 시 자동 시작
+
+    # 6. 방화벽 설정 (UFW 사용 시)
+    - name: Allow DHCP traffic through firewall
+      ufw:
+        rule: allow
+        name: 'DHCP'
+        state: enabled
+
+
+          #[Playbook 설명]
+
+#1. 패키지 캐시 갱신:
+  #apt 모듈을 사용하여 패키지 목록을 갱신합니다. 
+#update_cache: yes 옵션을 사용하여 패키지 목록을 최신 상태로 업데이트합니다.
+
+  #2. ISC DHCP 서버 설치:
+  #apt 모듈을 사용하여 ISC DHCP 서버를 설치합니다. 
+#state: present 옵션은 isc-dhcp-server 패키지가 설치되어 있지 않으면 설치합니다.
+
+  #3. DHCP 서버 설정 파일 구성:
+  #copy 모듈을 사용하여 /etc/dhcp/dhcpd.conf 파일을 생성하고 DHCP 서버의 설정을 추가합니다.
+#기본적으로 192.168.1.0/24 서브넷에 대해 192.168.1.100에서 192.168.1.200까지의 IP 범위를 제공하며, 
+#DNS 서버와 라우터 IP 주소도 설정합니다.
+
+#4. DHCP 서버 인터페이스 설정:
+  #lineinfile 모듈을 사용하여 /etc/default/isc-dhcp-server 파일에서 INTERFACESv4 값을 설정합니다. 
+#이 예시에서는 eth0 인터페이스를 사용하도록 설정합니다. 
+#실제 환경에서는 DHCP 서버가 동작할 네트워크 인터페이스 이름을 확인하여 해당 부분을 수정해야 합니다.
+
+#5. DHCP 서버 서비스 시작:
+#service 모듈을 사용하여 ISC DHCP 서버 서비스를 시작하고, 시스템 부팅 시 자동으로 시작되도록 설정합니다.
+
+#6. 방화벽 규칙 설정:
+  #ufw 모듈을 사용하여 **UFW (Uncomplicated Firewall)**에서 DHCP 트래픽을 허용하는 규칙을 추가합니다. 
+#name: 'DHCP'는 DHCP 관련 트래픽을 허용하는 규칙입니다.
+
+
+  #[실행 방법]
+#ansible-playbook -i your_inventory_file install_dhcp_server.yml

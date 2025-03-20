@@ -1,0 +1,163 @@
+#[우분투 서버에 DNS 서버 설치]
+
+---
+- name: Install and configure BIND9 DNS server on Ubuntu 22.04
+  hosts: ubuntu_servers
+  become: yes
+  tasks:
+    # 1. Install BIND9 and related utilities
+    - name: Install BIND9 DNS server
+      apt:
+        name:
+          - bind9
+          - bind9utils
+          - bind9-doc
+        state: present
+        update_cache: yes
+
+    # 2. Configure named.conf.options
+    - name: Configure named.conf.options
+      copy:
+        dest: /etc/bind/named.conf.options
+        content: |
+          options {
+              directory "/var/cache/bind";
+
+              // Allow queries from any IP
+              allow-query { any; };
+
+              // Allow recursion only from local network and localhost
+              allow-recursion { 127.0.0.1; localnets; };
+
+              // Forward queries to external DNS servers (e.g., Google DNS)
+              forwarders {
+                  8.8.8.8;
+                  8.8.4.4;
+              };
+
+              // Enable DNSSEC
+              dnssec-validation auto;
+
+              // Log settings
+              logging {
+                  channel default_file {
+                      file "/var/log/named.log" versions 3 size 5m;
+                      severity info;
+                      print-time yes;
+                      print-severity yes;
+                      print-category yes;
+                  };
+                  category default { default_file; };
+              };
+          };
+        owner: root
+        group: bind
+        mode: '0644'
+
+    # 3. Configure named.conf.local
+    - name: Configure named.conf.local
+      copy:
+        dest: /etc/bind/named.conf.local
+        content: |
+          zone "example.com" {
+              type master;
+              file "/etc/bind/db.example.com";  # Zone file path
+          };
+
+          zone "0.0.127.in-addr.arpa" {
+              type master;
+              file "/etc/bind/db.127";  # Reverse zone file path
+          };
+        owner: root
+        group: bind
+        mode: '0644'
+
+    # 4. Create a sample zone file (db.example.com)
+    - name: Create zone file for example.com
+      copy:
+        dest: /etc/bind/db.example.com
+        content: |
+          $TTL 86400
+          @    IN    SOA   ns1.example.com. admin.example.com. (
+                        2023031701 ; Serial
+                        3600       ; Refresh
+                        1800       ; Retry
+                        1209600    ; Expire
+                        86400 )    ; Minimum TTL
+
+               IN    NS    ns1.example.com.
+               IN    A     192.168.1.10
+
+          ns1   IN    A     192.168.1.10
+          www   IN    A     192.168.1.20
+        owner: root
+        group: bind
+        mode: '0644'
+
+    # 5. Create reverse zone file (db.127)
+    - name: Create reverse zone file for 127.0.0.1
+      copy:
+        dest: /etc/bind/db.127
+        content: |
+          $TTL 86400
+          @    IN    SOA   ns1.example.com. admin.example.com. (
+                        2023031701 ; Serial
+                        3600       ; Refresh
+                        1800       ; Retry
+                        1209600    ; Expire
+                        86400 )    ; Minimum TTL
+
+               IN    NS    ns1.example.com.
+          10   IN    PTR   www.example.com.
+        owner: root
+        group: bind
+        mode: '0644'
+
+    # 6. Ensure BIND9 is running and enabled on boot
+    - name: Ensure BIND9 is running and enabled
+      service:
+        name: bind9
+        state: started
+        enabled: yes
+
+
+          #[Playbook 설명]
+
+#1. BIND9 설치
+#- apt 모듈을 사용하여 bind9, bind9utils, bind9-doc 패키지를 설치합니다.
+  #- update_cache: yes 옵션은 패키지 목록을 최신 상태로 업데이트합니다.
+
+  #2. named.conf.options 파일 구성
+#named.conf.options 파일은 BIND9의 전역 옵션을 설정합니다.
+#- allow-query: DNS 쿼리를 허용할 IP 범위를 설정합니다. 여기서는 모든 IP에서의 쿼리를 허용합니다.
+  #- allow-recursion: 로컬 네트워크와 localhost에서만 재귀적 쿼리를 허용합니다.
+  #- forwarders: 외부 DNS 서버로 포워딩할 DNS 주소를 설정합니다. 예시로 구글의 DNS 서버인 8.8.8.8과 8.8.4.4를 사용합니다.
+  #- dnssec-validation: DNSSEC을 자동으로 활성화합니다.
+  #- logging: 로그 설정을 추가하여 /var/log/named.log에 DNS 로그를 기록합니다.
+  #- 파일 소유자는 root, 그룹은 bind, 파일 권한은 0644로 설정합니다.
+
+  #3. named.conf.local 파일 구성
+#named.conf.local 파일은 DNS 존(zone) 정의를 포함합니다.
+#- zone "example.com": example.com 도메인에 대한 설정을 포함하는 존을 정의합니다.
+  #- zone "0.0.127.in-addr.arpa": 역방향 DNS 레코드를 위한 설정입니다.
+  #- 파일 소유자는 root, 그룹은 bind, 파일 권한은 0644로 설정합니다.
+
+  #4. 존 파일 (db.example.com) 생성
+#- db.example.com 파일은 example.com 도메인에 대한 A 레코드와 NS 레코드를 포함합니다.
+  #- www.example.com과 ns1.example.com을 설정합니다.
+  #- 파일 소유자는 root, 그룹은 bind, 파일 권한은 0644로 설정합니다.
+
+  #5. 역방향 존 파일 (db.127) 생성
+#- db.127 파일은 127.0.0.1에 대한 역방향 DNS 레코드를 포함합니다.
+  #- 10.0.0.127.in-addr.arpa의 PTR 레코드를 설정하여 www.example.com으로 매핑됩니다.
+  #- 파일 소유자는 root, 그룹은 bind, 파일 권한은 0644로 설정합니다.
+
+  #6. BIND9 서비스 시작 및 활성화
+#- BIND9 서비스를 시작하고, 시스템 부팅 시 자동으로 시작되도록 설정합니다.
+
+  #7. 소유권 및 권한 설정
+#- 모든 설정 파일의 소유자는 root, 그룹은 bind, 파일 권한은 0644로 설정합니다. 이를 통해 시스템의 보안을 유지하면서 BIND9가 적절한 권한을 갖고 작동하도록 합니다.[실행 방법]
+
+
+  #[실행방법]
+#ansible-playbook -i your_inventory_file install_dns_server.yml
