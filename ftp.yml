@@ -1,0 +1,101 @@
+#[우분투 서버에 FTP 서버 설치]
+
+Ansible Playbook 예시: install_ftp_server.yml
+---
+- name: Install and configure vsftpd on Ubuntu 22.04 and create user2
+  hosts: your_target_hosts
+  become: true
+  tasks:
+
+    # Step 1: Install vsftpd
+    - name: Install vsftpd
+      apt:
+        name: vsftpd
+        state: present
+        update_cache: yes
+
+    # Step 2: Ensure vsftpd service is running and enabled
+    - name: Ensure vsftpd service is running and enabled
+      service:
+        name: vsftpd
+        state: started
+        enabled: yes
+
+    # Step 3: Configure vsftpd to disable anonymous login
+    - name: Configure vsftpd settings (disable anonymous login)
+      lineinfile:
+        path: /etc/vsftpd.conf
+        regexp: '^#?anonymous_enable='
+        line: 'anonymous_enable=NO'
+
+    # Step 4: Configure vsftpd to enable chroot for all users (isolating users to their home directories)
+    - name: Configure vsftpd to chroot users to their home directories
+      lineinfile:
+        path: /etc/vsftpd.conf
+        regexp: '^#?chroot_local_user='
+        line: 'chroot_local_user=YES'
+
+    - name: Ensure vsftpd allows local users
+      lineinfile:
+        path: /etc/vsftpd.conf
+        regexp: '^#?local_enable='
+        line: 'local_enable=YES'
+
+    # Step 5: Create user2 for FTP access
+    - name: Create user2 for FTP access
+      user:
+        name: user2
+        state: present
+        comment: "FTP User2"
+        shell: /bin/bash
+        home: /home/user2
+
+    # Step 6: Set password for user2
+    - name: Set password for user2
+      ansible.builtin.user:
+        name: user2
+        password: "{{ 'user2_password' | password_hash('sha512') }}"
+
+    # Step 7: Set proper permissions for user2's home directory
+    - name: Set correct permissions for user2's home directory
+      file:
+        path: /home/user2
+        owner: user2
+        group: user2
+        mode: '0755'
+        state: directory
+
+
+          #[Playbook 설명]
+
+#- Install vsftpd:
+  #. apt 모듈을 사용하여 vsftpd 패키지를 설치합니다.
+#. state: present로 지정하여 vsftpd가 설치되지 않은 경우 설치하고, 이미 설치되어 있으면 변경하지 않습니다.
+
+  #- Ensure vsftpd service is running and enabled:
+  #. vsftpd 서비스가 실행 중이고, 시스템 부팅 시 자동으로 시작되도록 설정합니다.
+
+#- Configure vsftpd settings (disable anonymous login):
+  #. lineinfile 모듈을 사용하여 /etc/vsftpd.conf 파일에서 anonymous_enable=NO로 설정하여 익명 FTP 접근을 비활성화합니다.
+
+#- Configure vsftpd to chroot users to their home directories:
+  #. lineinfile 모듈을 사용하여 chroot_local_user=YES 설정을 추가하거나 수정합니다. 
+#  이 설정은 모든 로컬 사용자가 자신의 홈 디렉토리 내에서만 FTP를 사용할 수 있도록 고립시킵니다.
+  #. local_enable=YES: 로컬 사용자의 FTP 접근을 허용합니다. 
+  #  이는 vsftpd가 로컬 사용자(시스템 사용자)의 로그인 및 FTP 접근을 허용하도록 설정하는 것입니다.
+
+  #- Create user2 for FTP access:
+  #. user 모듈을 사용하여 **user2**라는 사용자를 생성합니다. 
+#  이 사용자는 FTP 서비스에 접근할 수 있는 사용자입니다.
+  #. /home/user2 디렉토리를 사용자 홈 디렉토리로 설정합니다.
+
+#- Set password for user2:
+  #. user2 사용자의 패스워드를 설정합니다. 
+#  password_hash('sha512') 필터를 사용하여 user2_password라는 평문 비밀번호를 SHA-512 해시로 변환하여 안전하게 저장합니다.
+  #. user2_password는 사용자가 설정할 실제 패스워드로 바꿔야 합니다.
+
+#- Set correct permissions for user2's home directory:
+  #. /home/user2 디렉토리의 소유자를 user2로 설정하고, 디렉토리의 권한을 0755로 설정하여 사용자에게 적절한 접근 권한을 부여합니다.
+
+#[실행 방법]
+#ansible-playbook -i your_inventory_file install_ftp_server.yml
